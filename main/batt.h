@@ -16,14 +16,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <float.h>
 #include <math.h>
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
+#include "hal/adc_types.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_log.h"
 /* Public defines ----------------------------------------------------- */
 #define DEFAULT_VREF        (1100)
 #define NO_OF_SAMPLES       (64) // Multisampling
-#define STT_CHGR GPIO_NUM_17
+// #define STT_CHGR GPIO_NUM_17
 #define BATT_MAX            (5000)
 #define BATT_MIN            (2000)
 #define BATT_VOLTAGE_3700   (3700)

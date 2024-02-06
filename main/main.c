@@ -14,12 +14,16 @@
 #include "main.h"
 /* Private defines ---------------------------------------------------- */
 #define FW_VERSION "v0.2.1.0"
+
+#define __CALIBRATION_ON_
 /* Private enumerate/structure ---------------------------------------- */
 /* Private macros ----------------------------------------------------- */
 /* Public variables --------------------------------------------------- */
+spi_device_handle_t spi; /*!< Handle for a device on a SPI bus */
 /* Private variables -------------------------------------------------- */
 static bool g_mode_calibrate = true;
 static int g_calibrate_count = 0;
+// static int internal_counter = 0;
 /* Private function prototypes ---------------------------------------- */
 /* Function definitions ----------------------------------------------- */
 void app_main()
@@ -36,8 +40,10 @@ void app_main()
 	printf("LSM6DSO initialized\n");
 	batt_init();
 	printf("Battery initialized\n");
-	bl_spp_init();
-	printf("Bluetooth SPP initialized\n");
+	// bl_spp_init();
+	// printf("Bluetooth SPP initialized\n");
+	lsm6dso_toggle_fifo(&lsm, 1);
+	lsm6dso_toggle_sensor(&lsm, 1);
 	xTaskCreate(sensor_task, "timer_evt_task", 2048, NULL, 7, NULL);
 	xTaskCreate(led_task, "timer_evt_task", 2048, NULL, 5, NULL);
 }
@@ -48,17 +54,18 @@ static void sensor_task()
 		uint16_t fifocount = lsm6dso_read_fifo(&lsm);
 		if (fifocount > 0)
 		{
+#ifdef __CALIBRATION_ON_
 			if (g_mode_calibrate)
 			{
-				for (int i = 0; i < fifocount; i += 3)
+				for (int i = 0; i < fifocount / 2; i += 1)
 				{
-					lsm.acc_x_off += lsm.fifo_acc[i + 0];
-					lsm.acc_y_off += lsm.fifo_acc[i + 1];
-					lsm.acc_z_off += lsm.fifo_acc[i + 2];
+					lsm.acc_x_off += lsm.fifo_acc[i * 3 + 0];
+					lsm.acc_y_off += lsm.fifo_acc[i * 3 + 1];
+					lsm.acc_z_off += lsm.fifo_acc[i * 3 + 2];
 
-					lsm.gyro_x_off += lsm.fifo_gyro[i + 0];
-					lsm.gyro_y_off += lsm.fifo_gyro[i + 1];
-					lsm.gyro_z_off += lsm.fifo_gyro[i + 2];
+					lsm.gyro_x_off += lsm.fifo_gyro[i * 3 + 0];
+					lsm.gyro_y_off += lsm.fifo_gyro[i * 3 + 1];
+					lsm.gyro_z_off += lsm.fifo_gyro[i * 3 + 2];
 					g_calibrate_count++;
 				}
 				if (g_calibrate_count >= 300)
@@ -79,21 +86,33 @@ static void sensor_task()
 			{
 				if (fifocount > SAMPLES_MAX)
 					fifocount = SAMPLES_MAX;
-				for (int i = 0; i < fifocount; i += 3)
+				for (int i = 0; i < fifocount / 2; i += 1)
 				{
-					sprintf(measurement_buffer, ", %f, %f, %f, %f, %f, %f\n",
-							lsm.fifo_acc[i + 0] - lsm.acc_x_off,
-							lsm.fifo_acc[i + 1] - lsm.acc_y_off,
-							lsm.fifo_acc[i + 2] - lsm.acc_z_off,
-							lsm.fifo_gyro[i + 0] - lsm.gyro_x_off,
-							lsm.fifo_gyro[i + 1] - lsm.gyro_y_off,
-							lsm.fifo_gyro[i + 2] - lsm.gyro_z_off);
+					printf(", %f, %f, %f, %f, %f, %f\n",
+						   lsm.fifo_acc[i * 3 + 0] - lsm.acc_x_off,
+						   lsm.fifo_acc[i * 3 + 1] - lsm.acc_y_off,
+						   lsm.fifo_acc[i * 3 + 2] - lsm.acc_z_off,
+						   lsm.fifo_gyro[i * 3 + 0] - lsm.gyro_x_off,
+						   lsm.fifo_gyro[i * 3 + 1] - lsm.gyro_y_off,
+						   lsm.fifo_gyro[i * 3 + 2] - lsm.gyro_z_off);
 					strcat(message_buffer, measurement_buffer);
 				}
-				if (g_handler != NULL)
-					esp_spp_write(g_handler, strlen(message_buffer), (uint8_t *)message_buffer);
-				memcpy(message_buffer, "\0", 1);
 			}
+#else
+			if (fifocount > SAMPLES_MAX)
+				fifocount = SAMPLES_MAX;
+			for (int i = 0; i < fifocount / 2; i += 1)
+			{
+				printf(", %f, %f, %f, %f, %f, %f\n",
+					   lsm.fifo_acc[i * 3 + 0] - lsm.acc_x_off,
+					   lsm.fifo_acc[i * 3 + 1] - lsm.acc_y_off,
+					   lsm.fifo_acc[i * 3 + 2] - lsm.acc_z_off,
+					   lsm.fifo_gyro[i * 3 + 0] - lsm.gyro_x_off,
+					   lsm.fifo_gyro[i * 3 + 1] - lsm.gyro_y_off,
+					   lsm.fifo_gyro[i * 3 + 2] - lsm.gyro_z_off);
+				strcat(message_buffer, measurement_buffer);
+			}
+#endif
 		}
 		vTaskDelay(pdMS_TO_TICKS(333));
 	}
@@ -210,16 +229,16 @@ static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 		ESP_LOGI(SPP_TAG, "ESP_SPP_OPEN_EVT");
 		break;
 	case ESP_SPP_CLOSE_EVT:
-		ESP_LOGI(SPP_TAG, "ESP_SPP_CLOSE_EVT status:%d handle:%d close_by_remote:%d", param->close.status,
-				 param->close.handle, param->close.async);
+		// ESP_LOGI(SPP_TAG, "ESP_SPP_CLOSE_EVT status:%d handle:%d close_by_remote:%d", param->close.status,
+		// 		 param->close.handle, param->close.async);
 		lsm6dso_toggle_sensor(&lsm, 0);
 		lsm6dso_toggle_fifo(&lsm, 0);
 		break;
 	case ESP_SPP_START_EVT:
 		if (param->start.status == ESP_SPP_SUCCESS)
 		{
-			ESP_LOGI(SPP_TAG, "ESP_SPP_START_EVT handle:%d sec_id:%d scn:%d", param->start.handle, param->start.sec_id,
-					 param->start.scn);
+			// ESP_LOGI(SPP_TAG, "ESP_SPP_START_EVT handle:%d sec_id:%d scn:%d", param->start.handle, param->start.sec_id,
+			// 		 param->start.scn);
 		}
 		else
 		{
@@ -289,11 +308,11 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 	}
 #if (CONFIG_BT_SSP_ENABLED == true)
 	case ESP_BT_GAP_CFM_REQ_EVT:
-		ESP_LOGI(SPP_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %d", param->cfm_req.num_val);
+		ESP_LOGI(SPP_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %lu", param->cfm_req.num_val);
 		esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
 		break;
 	case ESP_BT_GAP_KEY_NOTIF_EVT:
-		ESP_LOGI(SPP_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%d", param->key_notif.passkey);
+		ESP_LOGI(SPP_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%lu", param->key_notif.passkey);
 		break;
 	case ESP_BT_GAP_KEY_REQ_EVT:
 		ESP_LOGI(SPP_TAG, "ESP_BT_GAP_KEY_REQ_EVT Please enter passkey!");
@@ -310,7 +329,7 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 void gpio_init()
 {
 	gpio_config_t io_conf;
-	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
 	io_conf.mode = GPIO_MODE_OUTPUT;
 	io_conf.pin_bit_mask = (1ULL << LED_GPIO);
 	io_conf.pull_down_en = 0;

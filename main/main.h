@@ -33,7 +33,7 @@
 #include "esp_system.h"
 #include "esp_types.h"
 #include "esp_intr_alloc.h"
-#include "esp_spi_flash.h"
+#include "spi_flash_mmap.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_bt.h"
@@ -46,8 +46,8 @@
 #include "driver/gpio.h"
 #include "soc/soc.h"
 #include "soc/timer_group_struct.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "lsm6dso.h"
 #include "batt.h"
 #include "bsp.h"
@@ -95,7 +95,6 @@ spi_device_interface_config_t devcfg =
         .flags = SPI_DEVICE_HALFDUPLEX,
         .queue_size = 12,
 };
-spi_device_handle_t spi; /**< Handle for a device on a SPI bus */
 uint32_t g_handler;
 lsm6dso_t lsm;
 /* Private variables -------------------------------------------------- */

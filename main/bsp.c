@@ -19,7 +19,7 @@
 /* Private macros ----------------------------------------------------- */
 /* Public variables --------------------------------------------------- */
 /* Private variables -------------------------------------------------- */
-spi_device_handle_t spi; /*!< Handle for a device on a SPI bus */
+
 /* Private function prototypes ---------------------------------------- */
 /* Function definitions ----------------------------------------------- */
 lsm6dso_err_t lsm6dso_write(uint8_t register_address, uint8_t value)
